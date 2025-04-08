@@ -1,19 +1,27 @@
-from google.cloud import storage
+from utils.iam_utils import get_credentials
+from google.cloud.storage import Client
 
 
-def download_blob(bucket_name, source_blob_name, destination_file_name):
-    """Downloads a blob from the bucket."""
-    # The ID of your GCS bucket
-    # bucket_name = "your-bucket-name"
+def get_storage_client(project: str) -> Client:
+    return Client(project=project, credentials=get_credentials(project))
 
-    # The ID of your GCS object
-    # source_blob_name = "storage-object-name"
 
-    # The path to which the file should be downloaded
-    # destination_file_name = "local/path/to/file"
-
-    storage_client = storage.Client()
-
+def download_blob(
+    project: str, 
+    bucket_name: str, 
+    source_blob_name: str, 
+    destination_file_name: str):
+    """Downloads a blob from the bucket.
+    
+    Example:
+    download_blob(
+        project='ul-gs-s-sandbx-02-prj',
+        bucket_name='icis-reports', 
+        source_blob_name='reports/petchem/a-polye-pdf-20110105', 
+        destination_file_name='.\\data\\hackathon\\unstrucutured\\a-polye-pdf-20110105.pdf'
+    )
+    """
+    storage_client = get_storage_client(project)
     bucket = storage_client.bucket(bucket_name)
 
     # Construct a client side representation of a blob.

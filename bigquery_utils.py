@@ -3,9 +3,9 @@ from pandas_gbq import read_gbq
 from typing import Optional, List, Dict, Union
 from utils.dataframe_utils import dfs_diff
 from utils.general_utils import filter_not_contain, lists_to_dict
+from utils.iam_utils import get_credentials
 from IPython.display import display
 from google.api_core.exceptions import NotFound
-from google.cloud import bigquery
 from google.cloud.bigquery import (
     Client, 
     Table, SchemaField, 
@@ -43,6 +43,10 @@ bq_to_pd_dtypes = {
     'TIMESTAMP': 'timestamp[ns][pyarrow]',
     'SMALLINT': 'short'
 }
+
+
+def get_bq_client(project: str) -> Client:
+    return Client(project=project, credentials=get_credentials(project))
 
 
 def get_bq_dtypes(
@@ -115,7 +119,7 @@ def create_gbq_from_parquet(
     """Create a new BigQuery table <project>.<dataset_id>.<table_id> 
     from the Parquet file sitting in the GCS location <parquet_gcs_uri>.
     """
-    client = Client(project=project)
+    client = get_bq_client(project)
     load_job = client.load_table_from_uri(
         parquet_gcs_uri,
         f'{dataset_id}.{table_id}',
@@ -137,7 +141,7 @@ def create_gbq_from_pd(
     Populate the BigQuery table using <df> after its creation. If <project>.<dataset>.<table> 
     already exists, then insert into it using <df>, assuming duplicates are allowed.
     """
-    client = Client(project=project)
+    client = get_bq_client(project)
     table_id = f'{project}.{dataset_id}.{table_id}'
     schema = get_bq_schema(df)
 
@@ -153,9 +157,9 @@ def create_gbq_from_pd(
         client.create_table(table=bq_table)
         insert_bq_table_values(bq_table, dataset_id, table_id, df, client)
     else:
-        job_config = bigquery.LoadJobConfig(
+        job_config = LoadJobConfig(
             schema=schema,
-            write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE
+            write_disposition=WriteDisposition.WRITE_TRUNCATE
         )
         job = client.load_table_from_dataframe(df, bq_table, job_config)
         job.result()
@@ -170,7 +174,7 @@ def read_gbq_to_pd(
     """Read the BigQuery table <project>.<dataset>.<table> into a Pandas Dataframe.
     Cast all columns to the same data types as in the BigQuery table. 
     """
-    client = Client(project=project)
+    client = get_bq_client(project)
     bq_table_ref = Table(table_ref=f'{project}.{dataset_id}.{table_id}')
     bq_table = client.get_table(bq_table_ref)
     pd_dataframe = read_gbq(f'SELECT * FROM `{project}.{dataset_id}.{table_id}`', project) 
@@ -187,7 +191,7 @@ def get_all_tables(
     name_only: bool = False) -> Union[List[str], Dict[str, DataFrame]]:
     """
     """
-    client = Client(project=project)
+    client = get_bq_client(project)
     tables = client.list_tables(dataset_id)
     if name_only:
         return [table.table_id for table in tables]
@@ -201,7 +205,7 @@ def get_all_tables_startswith(
     name_only: bool = False) -> Union[List[str], Dict[str, DataFrame]]:
     """
     """
-    client = Client(project=project)
+    client = get_bq_client(project)
     tables = client.list_tables(dataset_id)
     if name_only:
         return [table.table_id for table in tables]
@@ -216,7 +220,7 @@ def get_all_tables_endswith(
     name_only: bool = False) -> Union[List[str], Dict[str, DataFrame]]:
     """
     """
-    client = Client(project=project)
+    client = get_bq_client(project)
     tables = client.list_tables(dataset_id)
     if name_only:
         return [table.table_id for table in tables]
@@ -231,7 +235,7 @@ def get_all_tables_contains(
     name_only: bool = False) -> Union[List[str], Dict[str, DataFrame]]:
     """
     """
-    client = Client(project=project)
+    client = get_bq_client(project)
     tables = client.list_tables(dataset_id)
     try:
         if name_only:
@@ -272,7 +276,7 @@ def upsert_to_bigquery(
     # Define the full table ID
     table_ref = f"{project}.{dataset_id}.{table_id}"
 
-    client = Client(project=project)
+    client = get_bq_client(project)
     schema = client.get_table(Table(table_ref)).schema
     columns = [schema_field.name for schema_field in schema]
     dataframe = dataframe[columns].fillna(np.nan).astype(
@@ -282,9 +286,9 @@ def upsert_to_bigquery(
     # Load the dataframe into a temporary table
     temp_table_ref = f"{project}.{dataset_id}.{table_id}_temp"
 
-    job_config = bigquery.LoadJobConfig(
+    job_config = LoadJobConfig(
         schema=schema,
-        write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE
+        write_disposition=WriteDisposition.WRITE_TRUNCATE
     )
     job = client.load_table_from_dataframe(dataframe[columns], temp_table_ref, job_config=job_config)
     job.result()  # Wait for the job to complete
